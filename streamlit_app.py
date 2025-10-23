@@ -2,27 +2,28 @@ import streamlit as st
 import pandas as pd
 from pathlib import Path
 
-# Streamlit page setup
-st.set_page_config(
-    page_title='Temperature & Humidity Dashboard',
-    page_icon='🌡️',
-)
+st.set_page_config(page_title="Temperature & Humidity Dashboard", page_icon="🌡️")
 
-# -------------------------------------------------------------------------
-# Load the data
-DATA_FILENAME = Path(__file__).parent / 'environment_data.csv'
-
-try:
+# -----------------------------------------------------------------------------
+# Load data
+@st.cache_data
+def get_environment_data():
+    # 👇 This line finds the CSV inside your repo workspace
+    DATA_FILENAME = Path(__file__).parent / "data" / "environment_data.csv"
     df = pd.read_csv(DATA_FILENAME)
-except FileNotFoundError:
-    st.error(f"CSV file not found at: {DATA_FILENAME}")
-    st.stop()
+    return df
 
-# -------------------------------------------------------------------------
-# Page title
+env_df = get_environment_data()
+
+# -----------------------------------------------------------------------------
+# Page layout
 st.title("🌤️ Temperature and Humidity Over Time")
+st.write("This dashboard shows temperature and humidity readings over time.")
 
-st.write("This dashboard shows temperature and humidity readings from the environment_data.csv file.")
+st.dataframe(env_df.head())
+
+st.line_chart(env_df, x="Time", y=["Temperature (°C)", "Humidity (%)"])
+
 
 # -------------------------------------------------------------------------
 # Display basic info
