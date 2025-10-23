@@ -1,113 +1,67 @@
 import streamlit as st
 import pandas as pd
-import math
 from pathlib import Path
 
-# --------------------------------------------------------------------
-# Page setup
+# Streamlit page setup
 st.set_page_config(
     page_title='Temperature & Humidity Dashboard',
-    page_icon=':thermometer:',
+    page_icon='🌡️',
 )
 
-# --------------------------------------------------------------------
-# Load data from your CSV
-@st.cache_data
-def get_environment_data():
-    """Read temperature and humidity data from a local CSV file."""
+# -------------------------------------------------------------------------
+# Load the data
+DATA_FILENAME = Path(__file__).parent / 'environment_data.csv'
 
-    # 👉 CHANGE THIS PATH to match where you saved your file
-    DATA_FILENAME = Path(r"C:\Users\jbell\Downloads\environment_data.csv")
-
+try:
     df = pd.read_csv(DATA_FILENAME)
-    df['Date'] = pd.to_datetime(df['Date'])  # ensure date format
-    return df
+except FileNotFoundError:
+    st.error(f"CSV file not found at: {DATA_FILENAME}")
+    st.stop()
 
-env_df = get_environment_data()
+# -------------------------------------------------------------------------
+# Page title
+st.title("🌤️ Temperature and Humidity Over Time")
 
-# --------------------------------------------------------------------
-# Page title and description
-'''
-# 🌡️ Temperature & Humidity Dashboard
+st.write("This dashboard shows temperature and humidity readings from the environment_data.csv file.")
 
-Visualize temperature and humidity trends over time for selected locations.
-'''
+# -------------------------------------------------------------------------
+# Display basic info
+st.subheader("Preview of Data")
+st.dataframe(df.head())
 
-# --------------------------------------------------------------------
-# Sidebar filters
-min_date = env_df['Date'].min().date()
-max_date = env_df['Date'].max().date()
+# -------------------------------------------------------------------------
+# Slider to filter by time range
+time_min = df["Time"].min()
+time_max = df["Time"].max()
 
-from_date, to_date = st.slider(
-    'Select date range:',
-    min_value=min_date,
-    max_value=max_date,
-    value=[min_date, max_date],
-    format="YYYY-MM-DD"
+time_range = st.slider(
+    "Select Time Range",
+    min_value=float(time_min),
+    max_value=float(time_max),
+    value=(float(time_min), float(time_max))
 )
 
-locations = sorted(env_df['Location'].unique())
+filtered_df = df[(df["Time"] >= time_range[0]) & (df["Time"] <= time_range[1])]
 
-selected_locations = st.multiselect(
-    'Select locations:',
-    locations,
-    default=locations[:2] if len(locations) >= 2 else locations
-)
-
-# --------------------------------------------------------------------
-# Filter the data
-filtered_df = env_df[
-    (env_df['Location'].isin(selected_locations)) &
-    (env_df['Date'].between(str(from_date), str(to_date)))
-]
-
-# --------------------------------------------------------------------
-# Charts
-st.header('Temperature over time', divider='gray')
+# -------------------------------------------------------------------------
+# Line chart for temperature and humidity
+st.subheader("Temperature and Humidity Over Time")
 st.line_chart(
     filtered_df,
-    x='Date',
-    y='Temperature',
-    color='Location'
+    x="Time",
+    y=["Temperature (°C)", "Humidity (%)"]
 )
 
-st.header('Humidity over time', divider='gray')
-st.line_chart(
-    filtered_df,
-    x='Date',
-    y='Humidity',
-    color='Location'
-)
+# -------------------------------------------------------------------------
+# Display some summary stats
+st.subheader("Summary Statistics")
 
-# --------------------------------------------------------------------
-# Metrics summary
-st.header('Summary metrics', divider='gray')
+col1, col2 = st.columns(2)
 
-cols = st.columns(4)
+with col1:
+    st.metric("Average Temperature (°C)", f"{filtered_df['Temperature (°C)'].mean():.1f}")
+with col2:
+    st.metric("Average Humidity (%)", f"{filtered_df['Humidity (%)'].mean():.1f}")
 
-for i, loc in enumerate(selected_locations):
-    col = cols[i % len(cols)]
-
-    with col:
-        loc_data = filtered_df[filtered_df['Location'] == loc]
-
-        if not loc_data.empty:
-            avg_temp = loc_data['Temperature'].mean()
-            avg_hum = loc_data['Humidity'].mean()
-            delta_temp = loc_data['Temperature'].iloc[-1] - loc_data['Temperature'].iloc[0]
-            delta_hum = loc_data['Humidity'].iloc[-1] - loc_data['Humidity'].iloc[0]
-        else:
-            avg_temp = avg_hum = delta_temp = delta_hum = float('nan')
-
-        st.metric(
-            label=f'{loc} Avg Temp (°C)',
-            value=f'{avg_temp:.1f}',
-            delta=f'{delta_temp:+.1f}°C',
-            delta_color='normal' if delta_temp >= 0 else 'inverse'
-        )
-        st.metric(
-            label=f'{loc} Avg Humidity (%)',
-            value=f'{avg_hum:.1f}',
-            delta=f'{delta_hum:+.1f}%',
-            delta_color='normal' if delta_hum >= 0 else 'inverse'
-        )
+# Optional: show the code itself
+i
