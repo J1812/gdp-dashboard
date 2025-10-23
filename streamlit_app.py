@@ -3,149 +3,111 @@ import pandas as pd
 import math
 from pathlib import Path
 
-# Set the title and favicon that appear in the Browser's tab bar.
+# --------------------------------------------------------------------
+# Page setup
 st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
+    page_title='Temperature & Humidity Dashboard',
+    page_icon=':thermometer:',
 )
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
+# --------------------------------------------------------------------
+# Load data from your CSV
 @st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
+def get_environment_data():
+    """Read temperature and humidity data from a local CSV file."""
 
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
+    # 👉 CHANGE THIS PATH to match where you saved your file
+    DATA_FILENAME = Path(r"C:\Users\jbell\Downloads\environment_data.csv")
 
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
+    df = pd.read_csv(DATA_FILENAME)
+    df['Date'] = pd.to_datetime(df['Date'])  # ensure date format
+    return df
 
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
+env_df = get_environment_data()
 
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
-    )
-
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
+# --------------------------------------------------------------------
+# Page title and description
 '''
-# :earth_americas: GDP dashboard
+# 🌡️ Temperature & Humidity Dashboard
 
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
+Visualize temperature and humidity trends over time for selected locations.
 '''
 
-# Add some spacing
-''
-''
+# --------------------------------------------------------------------
+# Sidebar filters
+min_date = env_df['Date'].min().date()
+max_date = env_df['Date'].max().date()
 
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
+from_date, to_date = st.slider(
+    'Select date range:',
+    min_value=min_date,
+    max_value=max_date,
+    value=[min_date, max_date],
+    format="YYYY-MM-DD"
+)
 
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
+locations = sorted(env_df['Location'].unique())
 
-countries = gdp_df['Country Code'].unique()
+selected_locations = st.multiselect(
+    'Select locations:',
+    locations,
+    default=locations[:2] if len(locations) >= 2 else locations
+)
 
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
+# --------------------------------------------------------------------
 # Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
+filtered_df = env_df[
+    (env_df['Location'].isin(selected_locations)) &
+    (env_df['Date'].between(str(from_date), str(to_date)))
 ]
 
-st.header('GDP over time', divider='gray')
-
-''
-
+# --------------------------------------------------------------------
+# Charts
+st.header('Temperature over time', divider='gray')
 st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
+    filtered_df,
+    x='Date',
+    y='Temperature',
+    color='Location'
 )
 
-''
-''
+st.header('Humidity over time', divider='gray')
+st.line_chart(
+    filtered_df,
+    x='Date',
+    y='Humidity',
+    color='Location'
+)
 
-
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
-
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
+# --------------------------------------------------------------------
+# Metrics summary
+st.header('Summary metrics', divider='gray')
 
 cols = st.columns(4)
 
-for i, country in enumerate(selected_countries):
+for i, loc in enumerate(selected_locations):
     col = cols[i % len(cols)]
 
     with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
+        loc_data = filtered_df[filtered_df['Location'] == loc]
 
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
+        if not loc_data.empty:
+            avg_temp = loc_data['Temperature'].mean()
+            avg_hum = loc_data['Humidity'].mean()
+            delta_temp = loc_data['Temperature'].iloc[-1] - loc_data['Temperature'].iloc[0]
+            delta_hum = loc_data['Humidity'].iloc[-1] - loc_data['Humidity'].iloc[0]
         else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
+            avg_temp = avg_hum = delta_temp = delta_hum = float('nan')
 
         st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
+            label=f'{loc} Avg Temp (°C)',
+            value=f'{avg_temp:.1f}',
+            delta=f'{delta_temp:+.1f}°C',
+            delta_color='normal' if delta_temp >= 0 else 'inverse'
+        )
+        st.metric(
+            label=f'{loc} Avg Humidity (%)',
+            value=f'{avg_hum:.1f}',
+            delta=f'{delta_hum:+.1f}%',
+            delta_color='normal' if delta_hum >= 0 else 'inverse'
         )
